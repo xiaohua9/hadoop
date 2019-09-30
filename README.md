@@ -390,11 +390,11 @@ cd /opt/hadoop/etc/hadoo/
 
   ---
 
-  ### 在集群中搭建远程hive
+  ### 在集群中搭建远程hive，hiveserver2高可用
   
   ---
   
--   我们选择hadoop1安装MySQL，作为元数据的保存节点，hadoop2作为metastore服务节点，hadoop3/4作为客户端
+-   我们选择hadoop1安装MySQL，作为元数据的保存节点，hadoop2/3作为拥有自己metastore服务的hiveserver2节点，hadoop4作为客户端
 
 - 在hadoop1上安装MySQL 
 
@@ -407,6 +407,8 @@ cd /opt/hadoop/etc/hadoo/
   CREATE USER 'hive'@'%' IDENTIFIED BY '123';
   grant all privileges on hive_meta.* to hive@"%" identified by '123';
   flush privileges;
+  
+  service mysqld start开启mysql数据库服务
   ```
 
 - 在hadoop2上操作
@@ -443,6 +445,30 @@ cd /opt/hadoop/etc/hadoo/
     	<name>javax.jdo.option.ConnectionPassword</name>
     	<value>root</value>
     </property>
+    <property>
+    	<name>hive.server2.thrift.port</name>
+    	<value>10000</value>
+    </property>
+    <property>
+    	<name>hive.server2.thrift.bind.host</name>
+    	<value>hadoop2</value>
+    </property>
+    <property>
+    	<name>hive.server2.support.dynamic.service.discovery</name>
+    	<value>true</value>
+    </property>
+    <property>
+    	<name>hive.server2.zookeeper.namespace</name>
+    	<value>hiveserver2_zk</value>
+    </property>
+    <property>
+    	<name>hive.zookeeper.quorum</name>
+    	<value>hadoop2:2181,hadoop3:2181,hadoop4:2181</value>
+    </property>
+    <property>
+    	<name>hive.zookeeper.client.port</name>
+    	<value>2181</value>
+    </property>
     </configuration>
     ```
 
@@ -463,20 +489,71 @@ cd /opt/hadoop/etc/hadoo/
   ```xml
   <configuration>
   <property>
+  	<name>hive.server2.thrift.bind.host</name>
+  	<value>hadoop2</value>//把这里改成hadoop3,其余不变
+  </property>
+  </configuration>
+  ```
+  
+- hadoop4配置
+
+  - vim /opt/hive/conf/hive-site.xml(只需要以下内容)
+
+  ```xml
+  <configuration>
+  <property>
   	<name>hive.metastore.warehouse.dir</name>
   	<value>/user/hive_remote/warehouse</value>
   </property>
   <property>
   	<name>hive.metastore.uris</name>
-  	<value>thrift://hadoop2:9083</value>
+  	<value>thrift://hadoop3:9083</value>
   </property>
   </configuration>
   ```
 
-- hadoop4同hadoop4配置
+- 在hadoop4修改：vim /opt/hadoop/etc/hadoop/core-site.xml   增加以下内容
 
-- 在hadoop2上后台启动元数据服务：hive --service metastore &
+  ```xml
+  <property>
+  	<name>hadoop.proxyuser.hadoop.hosts</name>
+  	<value>*</value>
+  </property>
+  <property>
+  	<name>hadoop.proxyuser.hadoop.groups</name>
+  	<vaule>*</vaule>
+  </property>
+  <property>
+  	<name>hadoop.proxyuser.root.hosts</name>
+  	<value>*</value>
+  </property>
+  <property>
+  	<name>hadoop.proxyuser.root.groups</name>
+  	<value>*</value>
+  </property>
+  ```
 
-- hadoop3和4就能正常进入hive了
+- 在hadoop4修改：vim /opt/hadoop/etc/hadoop/hdfs-site.xml   增加以下内容
 
-- 验证：此时hadoop1数据库会有一个hive_remote数据库，保存表的元数据，可以查看，同时hdfs也会产生/user/hive_remote/warehouse/用于存放主数据，至于hdfs的概念这里就不说了
+  ```xml
+  <property>
+  	<name>dfs.webhdfs.enabled</name>
+  	<value>true</value>
+  </property>
+  ```
+
+- 将hadoop4 修改的core-site.xml和hdfs-site.xml分发给其余三台机器
+
+- 全部重新启动
+
+- 在hadoop2/3上后台启动beeline,会自动启动元数据服务：hiveserver2 &
+
+- hadoop4进beeline:
+
+  - beeline
+  - !connect jdbc:hive2://hadoop2,hadoop3,hadoop4/default;serviceDiscoveryMode=zooKeeper;zooKeeperNamespace=hiveserver2_zk root 123
+
+- 验证：
+  - 先在hadoop4登录beeline;再操作，每操作一次，活动的hiveserver2会显示ok（假设是hadoop2）
+  - 在hadoop2上kill Runjar进程
+  - hadoop4重进beeline;操作一次，如果hadoop3显示ok,则zookeeper成功管理hiveserver2,则高可用环境搭建成功。
