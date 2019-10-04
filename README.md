@@ -557,3 +557,113 @@ cd /opt/hadoop/etc/hadoo/
   - 先在hadoop4登录beeline;再操作，每操作一次，活动的hiveserver2会显示ok（假设是hadoop2）
   - 在hadoop2上kill Runjar进程
   - hadoop4重进beeline;操作一次，如果hadoop3显示ok,则zookeeper成功管理hiveserver2,则高可用环境搭建成功。
+
+---
+
+## hbase分布式高可用
+
+---
+
+- 配置规划
+
+  ```xml
+  hadoop1为hmaster
+  hadoop4为back-master 这两台服务器由zookeeper来协调
+  
+  hadoop2，hadoop3 ,hadoop4  是regionservers
+  hadoop2，hadoop3 ,hadoop4 也是zookeeper服务器
+  ```
+
+- 先在hadoop1上操作
+
+  - 将hbase解压到/opt下
+
+  - 配置环境变量(每台机器都配一下)
+
+    ```xml
+    vim /opt/profile
+    export HBASE_HOME=/opt/hbase
+    export PATH=$HBASE_HOME/bin:$PATH
+    source /opt/profile
+    ```
+
+    
+
+  - 将/opt/hadoop/etc/hadoop/hdfs-site.xml复制到hbase的conf目录下
+
+  - 同步时间（每台机器都去执行一下）
+
+    ```xml
+    yum install ntpdate -y       下载同步时间软件
+    ntpdate ntp1.aliyun.com       与阿里云时间服务器同步
+    ```
+
+  - vim /opt/hbase/conf/hbase.env.sh
+
+    ```xml
+    export JAVA_HOME=/opt/jdk1.8.0_181
+    export HBASE_MANAGES_ZK=fasle     使用自己配置的zookeeper集群
+    ```
+
+    
+
+  - vim /opt/hbase/conf/hbase-site.xml
+
+    ```xml
+    <property>
+    	<name>hbase.rootdir</name>
+    	<value>hdfs://mycluster/hbase</value>
+    </property>
+    <property>
+    	<name>hbase.cluster.distributed</name>
+    	<value>true</value>
+    </property>
+    <property>
+    	<name>hbase.zookeeper.quorum</name>
+    	<value>hadoop2,hadoop3,hadoop4</value>
+    </property>
+    ```
+
+  - vim /opt/hbase/conf/regionservers
+
+    ```xml
+    hadoop2
+    hadoop3
+    hadoop4
+    ```
+
+  - 在/opt/hbase/conf目录中创建ackup-masters文件
+      在文件中增加hadoop4  表示hadoop1为主服务器hadoop4为备用服务器
+
+  - 分发:将/opt/hbase发给其余三台机器
+
+- 启动hdfs集群之后再启动hbase
+
+  - 在hadoop1上：start-hbase.sh启动HBase集群
+
+  ​                                   stop-hbase.sh关闭HBase集群
+
+  ​                                    hbase-daemon.sh start master 启动master
+
+---
+
+## sqoop配置
+
+- 先在hadoop1上配置
+
+- 将sqoop 解压到/opt/下
+
+- 配置环境变量(每台机器都做一次)
+
+  ```xml
+  vim /etc/profile
+  export SQOOP_HOME=/opt/sqoop
+  export PATH=$SQOOP_HOME/bin:$PATH
+  source /etc/profile
+  ```
+
+- 将mysql数据驱动copy到sqoop程序的lib目录中
+
+- 将sqoop分发给其它三台机器
+
+- 每台机器即可正常使用sqoop了
