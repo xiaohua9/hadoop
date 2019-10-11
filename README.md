@@ -664,6 +664,19 @@ cd /opt/hadoop/etc/hadoo/
 
 - 将mysql数据驱动copy到sqoop程序的lib目录中
 
+- mv /opt/sqoop/conf/sqoop-env-template.sh sqoop-env.sh
+
+- vim sqoop-env.sh
+
+  ```xml
+  export HADOOP_COMMON_HOME=/opt/hadoop
+  export HADOOP_MAPRED_HOME=/opt/hadoop
+  export HIVE_HOME=/opt/hive
+  export ZOOKEEPER_HOME=/opt/zookeeper
+  export ZOOCFGDIR=/opt/zookeeper/conf
+  export HBASE_HOME=/opt/hbase
+  ```
+
 - 将sqoop分发给其它三台机器
 
 - 每台机器即可正常使用sqoop了
